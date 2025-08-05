@@ -1,5 +1,4 @@
-from typing import List, Union, Any
-import math
+from typing import List, Any
 
 def validate_positive(value: float, name: str) -> None:
     """
