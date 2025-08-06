@@ -415,7 +415,7 @@ class Helix(MagnetComponentBase if BASE_CLASS_AVAILABLE else yaml.YAMLObject):
     def generate_cut(self, format: str = "SALOME"):
         """Generate cut files using support utilities"""
         try:
-            from ...cut_utils import create_cut
+            from ...utils.manifacturing.hcuts import create_cut
 
             if self.model3d and getattr(self.model3d, "with_shapes", False):
                 create_cut(self, "LNCMI", self.name)
