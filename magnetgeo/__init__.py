@@ -7,6 +7,7 @@ Python Magnet Geometry package with new component architecture
 This version includes the refactored component structure:
 - magnetgeo.components.magnet: Main magnet classes (Helix, Bitter, Supra)
 - magnetgeo.components.support: Support components with validation
+- magnetgeo.components.structural: Structural components (Ring, Screen, CurrentLeads)
 - Legacy classes still available at root level for backward compatibility
 """
 
@@ -36,6 +37,25 @@ except ImportError:
         NEW_MAGNET_STRUCTURE = False
         print("✗ Magnet classes not available")
 
+# Import structural classes from new location
+try:
+    from .components.structural import Ring, Screen, InnerCurrentLead, OuterCurrentLead
+    NEW_STRUCTURAL_STRUCTURE = True
+    print("✓ Using new structural component structure")
+except ImportError:
+    # Fallback to old imports for transition
+    try:
+        from .Ring import Ring
+        from .Screen import Screen
+        from .InnerCurrentLead import InnerCurrentLead
+        from .OuterCurrentLead import OuterCurrentLead
+        NEW_STRUCTURAL_STRUCTURE = False
+        print("⚠ Using legacy structural classes (consider upgrading)")
+    except ImportError:
+        Ring = Screen = InnerCurrentLead = OuterCurrentLead = None
+        NEW_STRUCTURAL_STRUCTURE = False
+        print("✗ Structural classes not available")
+
 # Import remaining classes (not yet moved)
 LEGACY_CLASSES = {}
 try:
@@ -61,30 +81,6 @@ try:
     LEGACY_CLASSES['MSite'] = MSite
 except ImportError:
     MSite = None
-
-try:
-    from .Ring import Ring
-    LEGACY_CLASSES['Ring'] = Ring
-except ImportError:
-    Ring = None
-
-try:
-    from .Screen import Screen
-    LEGACY_CLASSES['Screen'] = Screen
-except ImportError:
-    Screen = None
-
-try:
-    from .InnerCurrentLead import InnerCurrentLead
-    LEGACY_CLASSES['InnerCurrentLead'] = InnerCurrentLead
-except ImportError:
-    InnerCurrentLead = None
-
-try:
-    from .OuterCurrentLead import OuterCurrentLead
-    LEGACY_CLASSES['OuterCurrentLead'] = OuterCurrentLead
-except ImportError:
-    OuterCurrentLead = None
 
 # Import support classes from new location
 try:
@@ -132,455 +128,143 @@ except ImportError:
 
 # Import utilities if available
 try:
-    from .utils import validation, enums
+    from .utils import validation, enum_types
     UTILS_AVAILABLE = True
-    print("✓ Validation and type safety utilities available")
 except ImportError:
-    validation = enums = None
     UTILS_AVAILABLE = False
+    validation = enum_types = None
 
-# Import and setup YAML compatibility system
+# Import YAML compatibility system if available
 try:
-    from .generic_yaml_compatibility import setup_yaml_compatibility, setup_custom_extractors
+    from .yaml_compatibility import setup_yaml_compatibility
+    YAML_COMPATIBILITY_AVAILABLE = True
+    
+    # Automatically set up YAML compatibility
     setup_yaml_compatibility()
-    setup_custom_extractors()
     print("✓ YAML compatibility system initialized")
+    
 except ImportError:
+    YAML_COMPATIBILITY_AVAILABLE = False
     print("⚠ YAML compatibility system not available")
 
-# Main exports
+# Define what's available for import
 __all__ = []
 
-# Add main magnet classes
-magnet_classes = []
-if Helix:
-    magnet_classes.append('Helix')
-if Bitter:
-    magnet_classes.append('Bitter')
-if Supra:
-    magnet_classes.append('Supra')
-__all__.extend(magnet_classes)
-
-# Add legacy classes that are available
-legacy_available = [name for name, cls in LEGACY_CLASSES.items() if cls is not None]
-__all__.extend(legacy_available)
+# Add available classes to __all__
+if Helix is not None:
+    __all__.append('Helix')
+if Bitter is not None:
+    __all__.append('Bitter')
+if Supra is not None:
+    __all__.append('Supra')
+if Ring is not None:
+    __all__.append('Ring')
+if Screen is not None:
+    __all__.append('Screen')
+if InnerCurrentLead is not None:
+    __all__.append('InnerCurrentLead')
+if OuterCurrentLead is not None:
+    __all__.append('OuterCurrentLead')
+if Insert is not None:
+    __all__.append('Insert')
+if Bitters is not None:
+    __all__.append('Bitters')
+if Supras is not None:
+    __all__.append('Supras')
+if MSite is not None:
+    __all__.append('MSite')
 
 # Add support classes if available
-support_classes = []
-if Chamfer:
-    support_classes.extend(['Chamfer', 'Groove', 'Model3D', 'ModelAxi'])
-if CoolingSlit:
-    support_classes.extend(['CoolingSlit', 'Tierod', 'Shape', 'Shape2D'])
-__all__.extend(support_classes)
-
-# Add utilities if available
-if UTILS_AVAILABLE:
-    __all__.extend(['validation', 'enums'])
+support_classes = ['Chamfer', 'Groove', 'Model3D', 'ModelAxi', 'CoolingSlit', 'Tierod', 'Shape', 'Shape2D']
+for cls_name in support_classes:
+    if globals().get(cls_name) is not None:
+        __all__.append(cls_name)
 
 # Add support module if available
-if support:
+if support is not None:
     __all__.append('support')
 
-
-def get_package_info():
-    """
-    Get comprehensive package information
+# Utility functions
+def get_available_classes():
+    """Get list of available classes"""
+    available = {}
     
-    Returns:
-        Dictionary with package status and capabilities
-    """
-    info = {
-        "version": __version__,
-        "new_magnet_structure": NEW_MAGNET_STRUCTURE,
-        "new_support_structure": NEW_SUPPORT_STRUCTURE,
-        "validation_utils": UTILS_AVAILABLE,
-        "total_classes": len(__all__),
+    # Check magnet classes
+    magnet_classes = {'Helix': Helix, 'Bitter': Bitter, 'Supra': Supra}
+    available['magnet'] = {k: v is not None for k, v in magnet_classes.items()}
+    
+    # Check structural classes  
+    structural_classes = {
+        'Ring': Ring, 'Screen': Screen, 
+        'InnerCurrentLead': InnerCurrentLead, 'OuterCurrentLead': OuterCurrentLead
     }
+    available['structural'] = {k: v is not None for k, v in structural_classes.items()}
     
-    if magnet_classes:
-        info["magnet_classes"] = magnet_classes
+    # Check legacy classes
+    available['legacy'] = {k: v is not None for k, v in LEGACY_CLASSES.items()}
     
-    if legacy_available:
-        info["legacy_classes"] = legacy_available
+    # Check support classes
+    support_classes_dict = {
+        'Chamfer': Chamfer, 'Groove': Groove, 'Model3D': Model3D, 'ModelAxi': ModelAxi,
+        'CoolingSlit': CoolingSlit, 'Tierod': Tierod, 'Shape': Shape, 'Shape2D': Shape2D
+    }
+    available['support'] = {k: v is not None for k, v in support_classes_dict.items()}
     
-    if support_classes:
-        info["support_classes"] = support_classes
-    
-    if UTILS_AVAILABLE:
-        info["utilities"] = ['validation', 'enums']
-    
-    return info
+    return available
 
+def print_status():
+    """Print current package status"""
+    print("\nMagnetGeo Package Status:")
+    print(f"  Version: {__version__}")
+    print(f"  New magnet structure: {NEW_MAGNET_STRUCTURE}")
+    print(f"  New structural structure: {NEW_STRUCTURAL_STRUCTURE}")
+    print(f"  New support structure: {NEW_SUPPORT_STRUCTURE}")
+    print(f"  YAML compatibility: {YAML_COMPATIBILITY_AVAILABLE}")
+    print(f"  Utils available: {UTILS_AVAILABLE}")
+    
+    available = get_available_classes()
+    for category, classes in available.items():
+        available_count = sum(classes.values())
+        total_count = len(classes)
+        print(f"  {category.title()} classes: {available_count}/{total_count} available")
 
-def print_package_status():
-    """Print current package status and migration progress"""
-    print(f"Python MagnetGeo v{__version__}")
-    print("=" * 50)
+# Optional: Print status when imported (can be disabled with environment variable)
+if os.environ.get('MAGNETGEO_QUIET') != '1':
+    print(f"MagnetGeo v{__version__} loaded")
     
-    info = get_package_info()
-    
-    # Magnet components status
-    if info.get('magnet_classes'):
-        structure_type = "New Structure" if NEW_MAGNET_STRUCTURE else "Legacy"
-        print(f"Magnet Classes ({structure_type}): {len(info['magnet_classes'])} available")
-        for cls in info['magnet_classes']:
-            print(f"  ✓ {cls}")
-    else:
-        print("Magnet Classes: Not available")
-    
-    # Legacy classes status  
-    if info.get('legacy_classes'):
-        print(f"\nLegacy Classes: {len(info['legacy_classes'])} available")
-        for cls in info['legacy_classes']:
-            print(f"  ✓ {cls}")
-    
-    # Support components status
-    if info.get('support_classes'):
-        structure_type = "New Structure" if NEW_SUPPORT_STRUCTURE else "Legacy"
-        print(f"\nSupport Components ({structure_type}): {len(info['support_classes'])} available")
-        for cls in info['support_classes']:
-            print(f"  ✓ {cls}")
-    else:
-        print("\nSupport Components: Not available")
-    
-    # Utilities status
-    if info.get('utilities'):
-        print(f"\nUtilities: {len(info['utilities'])} available")
-        for util in info['utilities']:
-            print(f"  ✓ {util}")
-    else:
-        print("\nUtilities: Not available")
-    
-    # Architecture status
-    print(f"\nArchitecture Status:")
-    print(f"  {'✓' if NEW_MAGNET_STRUCTURE else '⚠'} New magnet component structure")
-    print(f"  {'✓' if NEW_SUPPORT_STRUCTURE else '⚠'} New support component structure")
-    print(f"  {'✓' if UTILS_AVAILABLE else '⚠'} Enhanced validation utilities")
-    
-    # Overall status
-    if NEW_MAGNET_STRUCTURE and NEW_SUPPORT_STRUCTURE and UTILS_AVAILABLE:
-        print(f"\n🎉 All new architecture features available!")
-    elif NEW_MAGNET_STRUCTURE or NEW_SUPPORT_STRUCTURE or UTILS_AVAILABLE:
-        print(f"\n📈 Migration in progress...")
-    else:
-        print(f"\n📋 Using legacy architecture")
-
-
-def validate_installation():
-    """
-    Validate that the package is properly installed and configured
-    
-    Returns:
-        Tuple of (is_valid, issues_list)
-    """
-    issues = []
-    
-    # Check main magnet classes
-    required_magnet_classes = ['Helix', 'Bitter', 'Supra']
-    for cls_name in required_magnet_classes:
-        cls = globals().get(cls_name)
-        if cls is None:
-            issues.append(f"Main magnet class {cls_name} not available")
-    
-    # Check YAML loading
-    try:
-        import yaml
-        test_data = {"name": "test", "r": [1, 2], "z": [0, 1]}
-        yaml_str = yaml.dump(test_data)
-        loaded = yaml.load(yaml_str, Loader=yaml.SafeLoader)
-        if loaded != test_data:
-            issues.append("YAML serialization not working correctly")
-    except Exception as e:
-        issues.append(f"YAML support issue: {e}")
-    
-    # Check new component structure if available
-    if NEW_MAGNET_STRUCTURE:
-        try:
-            from .components.magnet import get_magnet_class
-            if get_magnet_class("Helix") is None:
-                issues.append("New magnet structure not working correctly")
-        except Exception as e:
-            issues.append(f"New magnet structure issue: {e}")
-    
-    if NEW_SUPPORT_STRUCTURE:
-        try:
-            from .components.support import get_support_class
-            if get_support_class("Model3D") is None:
-                issues.append("New support structure not working correctly")
-        except Exception as e:
-            issues.append(f"New support structure issue: {e}")
-    
-    # Check validation utilities if available
-    if UTILS_AVAILABLE:
-        try:
-            from .utils.validation import validate_positive
-            validate_positive(1.0, "test")  # Should not raise
-        except Exception as e:
-            issues.append(f"Validation utilities issue: {e}")
-    
-    is_valid = len(issues) == 0
-    return (is_valid, issues)
-
-
-def run_diagnostics():
-    """Run comprehensive package diagnostics"""
-    print("Running MagnetGeo Package Diagnostics...")
-    print("=" * 60)
-    
-    # Package status  
-    print_package_status()
-    
-    # Component diagnostics if available
-    if NEW_MAGNET_STRUCTURE or NEW_SUPPORT_STRUCTURE:
-        print("\nComponent Structure Diagnostics:")
-        print("-" * 35)
-        try:
-            from .components import run_component_diagnostics
-            run_component_diagnostics()
-        except ImportError:
-            print("Component diagnostics not available")
-    
-    # Installation validation
-    print("\nInstallation Validation:")
-    print("-" * 25)
-    is_valid, issues = validate_installation()
-    
-    if is_valid:
-        print("✅ Package validation passed - all systems operational")
-    else:
-        print("❌ Package validation failed with issues:")
-        for issue in issues:
-            print(f"  • {issue}")
-    
-    # Migration recommendations
-    print("\nMigration Recommendations:")
-    print("-" * 30)
-    
+# Optional: Show warnings for missing components
+if os.environ.get('MAGNETGEO_SHOW_WARNINGS') == '1':
+    missing_components = []
     if not NEW_MAGNET_STRUCTURE:
-        print("📈 Consider migrating to new magnet component structure:")
-        print("   from magnetgeo.components.magnet import Helix, Bitter, Supra")
-    
+        missing_components.append("magnet components")
+    if not NEW_STRUCTURAL_STRUCTURE:
+        missing_components.append("structural components")
     if not NEW_SUPPORT_STRUCTURE:
-        print("📈 Consider migrating to new support component structure:")
-        print("   from magnetgeo.components.support import Chamfer, Groove, ...")
-    
-    if not UTILS_AVAILABLE:
-        print("📈 Consider adding validation utilities for enhanced error checking")
-    
-    if NEW_MAGNET_STRUCTURE and NEW_SUPPORT_STRUCTURE and UTILS_AVAILABLE:
-        print("🎉 No migration needed - using latest architecture!")
-    
-    status = "HEALTHY" if is_valid else "NEEDS ATTENTION"
-    print(f"\nOverall Package Status: {status}")
-    return is_valid
-
-
-# Convenience functions for users
-def create_helix(name, r, z, **kwargs):
-    """
-    Convenience function to create a Helix with validation
-    
-    Args:
-        name: Helix name
-        r: Radial bounds [r_min, r_max]
-        z: Axial bounds [z_min, z_max]
-        **kwargs: Additional helix parameters
+        missing_components.append("support components")
+    if not YAML_COMPATIBILITY_AVAILABLE:
+        missing_components.append("YAML compatibility")
         
-    Returns:
-        Helix instance
-    """
-    if not Helix:
-        raise ImportError("Helix class not available")
-    
-    # Set defaults for required parameters
-    defaults = {
-        'cutwidth': 0.2,
-        'odd': True,
-        'dble': True,
-        'modelaxi': ModelAxi() if ModelAxi else None,
-        'model3d': Model3D(cad="default") if Model3D else None,
-        'shape': Shape("", "") if Shape else None,
-    }
-    
-    # Merge with user-provided parameters
-    for key, default_value in defaults.items():
-        if key not in kwargs:
-            kwargs[key] = default_value
-    
-    return Helix(name, r, z, **kwargs)
-
-
-def create_bitter(name, r, z, **kwargs):
-    """
-    Convenience function to create a Bitter magnet with validation
-    
-    Args:
-        name: Bitter magnet name
-        r: Radial bounds [r_min, r_max]  
-        z: Axial bounds [z_min, z_max]
-        **kwargs: Additional bitter parameters
-        
-    Returns:
-        Bitter instance
-    """
-    if not Bitter:
-        raise ImportError("Bitter class not available")
-    
-    # Set defaults for required parameters
-    defaults = {
-        'odd': True,
-        'modelaxi': ModelAxi() if ModelAxi else None,
-        'coolingslits': [],
-        'tierod': None,
-        'innerbore': r[0] * 0.8 if r else 0,
-        'outerbore': r[1] * 1.2 if r else 0,
-    }
-    
-    # Merge with user-provided parameters
-    for key, default_value in defaults.items():
-        if key not in kwargs:
-            kwargs[key] = default_value
-    
-    return Bitter(name, r, z, **kwargs)
-
-
-def create_supra(name, r, z, **kwargs):
-    """
-    Convenience function to create a Supra magnet with validation
-    
-    Args:
-        name: Supra magnet name
-        r: Radial bounds [r_min, r_max]
-        z: Axial bounds [z_min, z_max]
-        **kwargs: Additional supra parameters
-        
-    Returns:
-        Supra instance
-    """
-    if not Supra:
-        raise ImportError("Supra class not available")
-    
-    # Set defaults for required parameters
-    defaults = {
-        'n': 0,
-        'struct': "",
-    }
-    
-    # Merge with user-provided parameters
-    for key, default_value in defaults.items():
-        if key not in kwargs:
-            kwargs[key] = default_value
-    
-    return Supra(name, r, z, **kwargs)
-
-
-# Backward compatibility helpers
-def get_class_by_name(class_name: str):
-    """
-    Get class by name with deprecation warning for old usage patterns
-    
-    Args:
-        class_name: Name of class to retrieve
-        
-    Returns:
-        Class object or None if not found
-    """
-    # Check if it's available in globals
-    cls = globals().get(class_name)
-    if cls:
-        return cls
-    
-    # Try new component structure
-    if NEW_MAGNET_STRUCTURE:
-        try:
-            from .components.magnet import get_magnet_class
-            cls = get_magnet_class(class_name)
-            if cls:
-                return cls
-        except ImportError:
-            pass
-    
-    if NEW_SUPPORT_STRUCTURE:
-        try:
-            from .components.support import get_support_class  
-            cls = get_support_class(class_name)
-            if cls:
-                return cls
-        except ImportError:
-            pass
-    
-    return None
-
-
-def check_compatibility():
-    """Check if package is compatible with older magnetgeo code"""
-    required_classes = ['Helix', 'Bitter', 'Supra', 'Insert', 'Ring']
-    missing = []
-    
-    for cls_name in required_classes:
-        if cls_name not in globals() or globals()[cls_name] is None:
-            missing.append(cls_name)
-    
-    if missing:
-        print(f"⚠ Compatibility issue: Missing classes {missing}")
-        return False
-    
-    print("✅ Backward compatibility confirmed")
-    return True
-
-
-# Show status on import (can be disabled by setting environment variable)
-if os.environ.get('MAGNETGEO_SHOW_STATUS', '1') == '1':
-    print(f"Python MagnetGeo v{__version__} loaded")
-    
-    if NEW_MAGNET_STRUCTURE and NEW_SUPPORT_STRUCTURE and UTILS_AVAILABLE:
-        print("🎉 All new architecture features available")
-    elif NEW_MAGNET_STRUCTURE and NEW_SUPPORT_STRUCTURE:
-        print("✅ New component architecture available")
-    elif NEW_MAGNET_STRUCTURE or NEW_SUPPORT_STRUCTURE:
-        print("📈 Partial migration to new architecture")
-    else:
-        print("📋 Using legacy architecture")
-
-
-# Deprecation warnings for old import patterns
-def _warn_old_import(old_path: str, new_path: str):
-    """Issue deprecation warning for old import patterns"""
-    warnings.warn(
-        f"Importing from '{old_path}' is deprecated. Use '{new_path}' instead.",
-        DeprecationWarning,
-        stacklevel=3
-    )
-
-
-# Override __getattr__ to provide deprecation warnings for direct imports
-def __getattr__(name: str):
-    """Handle attribute access with deprecation warnings"""
-    
-    # Check if it's a magnet class that should use new import
-    if name in ['Helix', 'Bitter', 'Supra'] and NEW_MAGNET_STRUCTURE:
-        _warn_old_import(
-            f"magnetgeo.{name}", 
-            f"magnetgeo.components.magnet.{name}"
+    if missing_components:
+        warnings.warn(
+            f"Some magnetgeo components are using legacy implementations: {', '.join(missing_components)}. "
+            "Consider upgrading to the new component structure.",
+            UserWarning
         )
-        return globals().get(name)
-    
-    # Check if it's a support class that should use new import
-    support_classes = ['Chamfer', 'Groove', 'Model3D', 'ModelAxi', 'CoolingSlit', 'Tierod', 'Shape', 'Shape2D']
-    if name in support_classes and NEW_SUPPORT_STRUCTURE:
-        _warn_old_import(
-            f"magnetgeo.{name}",
-            f"magnetgeo.components.support.{name}"
-        )
-        return globals().get(name)
-    
-    # Default behavior
-    try:
-        return globals()[name]
-    except KeyError:
-        raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
+# Backward compatibility notice
+def _show_migration_notice():
+    """Show migration notice for users of old import structure"""
+    notice = """
+    NOTE: MagnetGeo has been restructured with a new component architecture.
+    
+    New import structure:
+    - from magnetgeo.components.magnet import Helix, Bitter, Supra
+    - from magnetgeo.components.structural import Ring, Screen, InnerCurrentLead, OuterCurrentLead
+    - from magnetgeo.components.support import Chamfer, Groove, ModelAxi, etc.
+    
+    Legacy imports still work but consider updating for better performance and features.
+    """
+    return notice
 
-if __name__ == "__main__":
-    # If run as script, show full diagnostics
-    run_diagnostics()
+# Make the migration notice available but don't print it automatically
+__migration_notice__ = _show_migration_notice
