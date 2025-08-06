@@ -11,7 +11,7 @@ detailed superconducting magnet structure support.
 import json
 import yaml
 from functools import cached_property
-from typing import List, Optional, Any
+from typing import List, Optional
 
 # Import base classes
 try:
@@ -23,14 +23,23 @@ except ImportError:
     BASE_CLASS_AVAILABLE = False
     MagnetComponentBase = object
 
-# Try to import superconducting structure support
+# Try to import superconducting structure support (NEW LOCATION)
 try:
-    from ...SupraStructure import HTSinsert
+    from ..hts.structure import HTSinsert
 
     SUPRA_STRUCTURE_AVAILABLE = True
 except ImportError:
-    SUPRA_STRUCTURE_AVAILABLE = False
-    print("Warning: SupraStructure not available")
+    # Fallback to old location for backward compatibility
+    try:
+        from ..hts.structure import HTSinsert
+
+        SUPRA_STRUCTURE_AVAILABLE = True
+        print(
+            "Warning: Using deprecated SupraStructure import. Please update to use magnetgeo.components.hts.structure"
+        )
+    except ImportError:
+        SUPRA_STRUCTURE_AVAILABLE = False
+        print("Warning: HTSinsert not available")
 
 # Try to import validation utilities
 try:
@@ -104,7 +113,7 @@ class Supra(MagnetComponentBase if BASE_CLASS_AVAILABLE else yaml.YAMLObject):
                 delattr(self, f"_{attr}")
 
     @cached_property
-    def magnet_struct(self) -> Optional[Any]:
+    def magnet_struct(self) -> Optional[HTSinsert]:
         """Load detailed magnet structure on first access"""
         if not SUPRA_STRUCTURE_AVAILABLE or not self.struct:
             return None
@@ -115,7 +124,7 @@ class Supra(MagnetComponentBase if BASE_CLASS_AVAILABLE else yaml.YAMLObject):
             print(f"Warning: Could not load structure from '{self.struct}': {e}")
             return None
 
-    def get_magnet_struct(self, directory: Optional[str] = None) -> Optional[Any]:
+    def get_magnet_struct(self, directory: Optional[str] = None) -> Optional[HTSinsert]:
         """
         Get magnet structure (public interface)
 
@@ -134,7 +143,7 @@ class Supra(MagnetComponentBase if BASE_CLASS_AVAILABLE else yaml.YAMLObject):
             print(f"Warning: Could not load structure: {e}")
             return None
 
-    def check_dimensions(self, magnet: Any = None):
+    def check_dimensions(self, magnet: Optional[HTSinsert] = None):
         """
         Check and update dimensions from structure if available
 
@@ -208,9 +217,7 @@ class Supra(MagnetComponentBase if BASE_CLASS_AVAILABLE else yaml.YAMLObject):
             # Count insulation components from structure
             names = magnet.get_names("", self.detail)
             insulation_count = sum(
-                1
-                for name in names
-                if "insul" in name.lower() or "mandrin" in name.lower()
+                1 for name in names if "insul" in name.lower() or "iso" in name.lower()
             )
             return ("StructuralInsulation", max(1, insulation_count))
 
@@ -258,6 +265,7 @@ class Supra(MagnetComponentBase if BASE_CLASS_AVAILABLE else yaml.YAMLObject):
             if magnet:
                 self.check_dimensions(magnet)
                 if hasattr(magnet, "get_names"):
+                    # Updated to match new HTSinsert interface
                     return magnet.get_names(
                         mname=mname, detail=self.detail, verbose=verbose
                     )
@@ -317,67 +325,70 @@ class Supra(MagnetComponentBase if BASE_CLASS_AVAILABLE else yaml.YAMLObject):
         Check if intersection with rectangle defined by r,z is non-empty
 
         Args:
-            r: Radial bounds [r_min, r_max] of test rectangle
-            z: Axial bounds [z_min, z_max] of test rectangle
+            r: Radial bounds [r_min, r_max]
+            z: Axial bounds [z_min, z_max]
 
         Returns:
-            True if objects intersect, False otherwise
+            True if intersection is non-empty
         """
-        # Check if rectangles overlap in both dimensions
-        r_overlap = self.r[0] < r[1] and r[0] < self.r[1]
-        z_overlap = self.z[0] < z[1] and z[0] < self.z[1]
+        return (
+            self.r[0] < r[1]
+            and self.r[1] > r[0]
+            and self.z[0] < z[1]
+            and self.z[1] > z[0]
+        )
 
-        return r_overlap and z_overlap
-
-    def get_structure_info(self) -> dict:
+    def is_inside(self, r: float, z: float) -> bool:
         """
-        Get comprehensive structure information
+        Check if point (r, z) is inside magnet bounds
+
+        Args:
+            r: Radial coordinate
+            z: Axial coordinate
 
         Returns:
-            Dictionary with structure properties
+            True if point is inside magnet bounds
         """
-        info = {
+        return self.r[0] <= r <= self.r[1] and self.z[0] <= z <= self.z[1]
+
+    def get_magnet_data(self) -> dict:
+        """Get complete magnet data as dictionary"""
+        data = {
             "name": self.name,
-            "detail_level": self.detail,
-            "has_structure": bool(self.struct),
-            "basic_turns": self.n,
+            "r": self.r.copy(),
+            "z": self.z.copy(),
+            "n": self.n,
+            "struct": self.struct,
+            "detail": self.detail,
         }
 
+        # Add structure data if available
         magnet = self.magnet_struct
         if magnet:
-            try:
-                info.update(
-                    {
-                        "structure_r0": (
-                            magnet.getR0() if hasattr(magnet, "getR0") else None
-                        ),
-                        "structure_r1": (
-                            magnet.getR1() if hasattr(magnet, "getR1") else None
-                        ),
-                        "structure_height": (
-                            magnet.getH() if hasattr(magnet, "getH") else None
-                        ),
-                        "structure_turns": (
-                            sum(magnet.getNtapes())
-                            if hasattr(magnet, "getNtapes")
-                            else None
-                        ),
-                        "dblpancake_count": (
-                            magnet.getN() if hasattr(magnet, "getN") else None
-                        ),
-                    }
-                )
-            except Exception as e:
-                info["structure_error"] = str(e)
+            data["structure_info"] = {
+                "r0": magnet.getR0(),
+                "r1": magnet.getR1(),
+                "z0": magnet.getZ0(),
+                "h": magnet.getH(),
+                "n_dblpancakes": magnet.getN(),
+                "total_tapes": (
+                    sum(magnet.getNtapes()) if hasattr(magnet, "getNtapes") else 0
+                ),
+            }
 
-        return info
+        return data
 
     # Serialization methods
-    def __repr__(self):
-        """Enhanced string representation"""
-        msg = f"{self.__class__.__name__}(name={self.name}, r={self.r}, z={self.z}, "
-        msg += f"n={self.n}, struct={self.struct}, detail={self.detail})"
-        return msg
+    def to_dict(self) -> dict:
+        """Convert to dictionary for serialization"""
+        return {
+            "name": self.name,
+            "r": self.r,
+            "z": self.z,
+            "n": self.n,
+            "struct": self.struct,
+            "detail": self.detail,
+        }
 
     def dump(self):
         """Dump supra magnet to YAML file"""
@@ -418,14 +429,7 @@ class Supra(MagnetComponentBase if BASE_CLASS_AVAILABLE else yaml.YAMLObject):
             )
         except ImportError:
             # Fallback JSON conversion
-            data = {
-                "name": self.name,
-                "r": self.r,
-                "z": self.z,
-                "n": self.n,
-                "struct": self.struct,
-                "detail": self.detail,
-            }
+            data = self.to_dict()
             return json.dumps(data, indent=4, sort_keys=True)
 
     def write_to_json(self):
@@ -494,6 +498,27 @@ class Supra(MagnetComponentBase if BASE_CLASS_AVAILABLE else yaml.YAMLObject):
         if hasattr(self, "struct") and self.struct:
             if not isinstance(self.struct, str):
                 raise ValueError("struct must be a string filename")
+
+    def __repr__(self) -> str:
+        """String representation"""
+        return (
+            f"Supra(name={self.name}, r={self.r}, z={self.z}, "
+            f"n={self.n}, struct='{self.struct}', detail='{self.detail}')"
+        )
+
+    def __str__(self) -> str:
+        """Detailed string representation"""
+        msg = f"Supra Magnet: {self.name}\n"
+        msg += f"  Radial bounds: {self.r[0]:.1f} - {self.r[1]:.1f} mm\n"
+        msg += f"  Axial bounds: {self.z[0]:.1f} - {self.z[1]:.1f} mm\n"
+        msg += f"  Turns: {self.n}\n"
+        msg += f"  Detail level: {self.detail}\n"
+        if self.struct:
+            msg += f"  Structure file: {self.struct}\n"
+            magnet = self.magnet_struct
+            if magnet:
+                msg += f"  Structure loaded: {magnet.getN()} double pancakes\n"
+        return msg
 
 
 def Supra_constructor(loader, node):

@@ -550,7 +550,7 @@ class HTSinsert(SupportComponentBase if BASE_AVAILABLE else object):
             msg += f"  Total tape turns: {total_tapes}\n"
         
         if self.dblpancakes:
-            msg += f"  Double pancake positions:\n"
+            msg += "  Double pancake positions:\n"
             for i, dp in enumerate(self.dblpancakes):
                 msg += f"    DP[{i}]: z={dp.getZ0():.1f} mm, h={dp.getH():.1f} mm\n"
         
